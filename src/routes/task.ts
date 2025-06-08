@@ -1,8 +1,10 @@
+import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { buildRoutePath } from "../utils";
+import { buildRoutePath, generateCsv } from "../utils";
 import { Database } from "../infra/db/database";
 import { ServerResponse } from "node:http";
 import { TaskProps } from "../dtos";
+import { parse } from "csv-parse";
 
 const database = new Database();
 
@@ -71,6 +73,45 @@ export const routesTask = [
       database.insert(TABLE_NAME, task);
 
       return res.writeHead(201).end();
+    },
+  },
+
+  {
+    method: "POST",
+    path: buildRoutePath("/tasks"),
+    handler: async (req: any, res: ServerResponse) => {
+      await generateCsv();
+
+      try {
+        const parser = await fs.createReadStream("output.csv").pipe(
+          parse({
+            columns: true,
+            delimiter: ",",
+            skip_empty_lines: true,
+          })
+        );
+
+        for await (const record of parser) {
+          console.log(record);
+          const task: TaskProps = {
+            id: randomUUID(),
+            description: record.description,
+            title: record.title,
+            updated_at: new Date(),
+            created_at: new Date(),
+          };
+
+          await database.insert(TABLE_NAME, task);
+        }
+
+        return res.writeHead(201).end();
+      } catch (error) {
+        return res.writeHead(500).end(
+          JSON.stringify({
+            message: "Oh nooo! I have problem",
+          })
+        );
+      }
     },
   },
   {
